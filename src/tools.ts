@@ -1,0 +1,353 @@
+// Tool definitions for the AgentDomains MCP server.
+//
+// Each tool is a thin wrapper over one AgentDomains API endpoint. Request and
+// response shapes mirror the Go CLI (cmd/agentdomains/main.go) exactly, so a
+// tool call and the equivalent CLI command hit the API identically.
+
+import { ApiConfig, request, resourcePath } from "./api.js";
+
+export interface ToolDef {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  /** Tools that work without an API key (public endpoints). */
+  public?: boolean;
+  call(cfg: ApiConfig, args: Record<string, any>): Promise<unknown>;
+}
+
+/** The optional `domain` property shared by every label-scoped tool. */
+const domainProp = {
+  domain: {
+    type: "string",
+    description:
+      "Which domain to act under: 'makes.fyi' (the default) or 'agentdomains.co'. " +
+      "The same label can exist under each, so pass this whenever you are not using the default.",
+  },
+} as const;
+
+const labelProp = {
+  label: {
+    type: "string",
+    description: "The subdomain label, without the domain suffix (e.g. 'myapp' for myapp.makes.fyi).",
+  },
+} as const;
+
+export const TOOLS: ToolDef[] = [
+  {
+    name: "check_availability",
+    description:
+      "Check whether a subdomain label is free before claiming it. Requires no API key. " +
+      "Returns { label, domain, fqdn, available, reason } where reason is 'available', 'taken', or " +
+      "'invalid' (with a 'detail' explaining why the label is not usable).",
+    inputSchema: {
+      type: "object",
+      properties: { ...labelProp, ...domainProp },
+      required: ["label"],
+    },
+    public: true,
+    call: (cfg, a) => {
+      const q = new URLSearchParams({ label: String(a.label) });
+      if (a.domain) q.set("domain", String(a.domain));
+      return request(cfg, "GET", `/v1/available?${q.toString()}`, undefined, false);
+    },
+  },
+
+  {
+    name: "signup",
+    description:
+      "Create a new AgentDomains account and get an API key. Requires no existing key. " +
+      "IMPORTANT: the returned api_key is shown ONCE and is never retrievable again — you must store it " +
+      "immediately (save it to ~/.agentdomains/config.json or set AGENTDOMAINS_API_KEY) or the account is lost. " +
+      "The account is provisional: attach and confirm an email within 30 days (see the attach_email tool) or " +
+      "it is deleted along with its domains. This endpoint is rate-limited per IP address.",
+    inputSchema: { type: "object", properties: {} },
+    public: true,
+    call: (cfg) => request(cfg, "POST", "/v1/signup", undefined, false),
+  },
+
+  {
+    name: "whoami",
+    description:
+      "Show the current account: id, state, attached email and whether it is verified, quota, domains used, " +
+      "and which domains are available to claim under.",
+    inputSchema: { type: "object", properties: {} },
+    call: (cfg) => request(cfg, "GET", "/v1/whoami"),
+  },
+
+  {
+    name: "attach_email",
+    description:
+      "Attach an email address to the account and send it a verification link. A human must click that link " +
+      "within 30 days or the provisional account and its domains are deleted. Use this right after signup.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        email: { type: "string", description: "The email address to attach and send the verification link to." },
+      },
+      required: ["email"],
+    },
+    call: (cfg, a) => request(cfg, "POST", "/v1/account/email", { email: a.email }),
+  },
+
+  {
+    name: "claim_domain",
+    description:
+      "Register a subdomain (label.makes.fyi or label.agentdomains.co) on this account, optionally creating its " +
+      "first DNS record in the same call. An email is required the first time an account registers a name — pass " +
+      "'email' here or call attach_email first; the name is reaped if that email is not confirmed within 30 days. " +
+      "Returns the fqdn and, when a record was requested, the created record.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...labelProp,
+        ...domainProp,
+        email: {
+          type: "string",
+          description:
+            "Required on the account's first registration if no email is attached yet. Sends a confirmation link.",
+        },
+        type: {
+          type: "string",
+          description: "Optional DNS record to create immediately: A, AAAA, CNAME, or TXT.",
+        },
+        content: {
+          type: "string",
+          description: "Value for that record (an IP for A/AAAA, a hostname for CNAME, text for TXT).",
+        },
+        host: {
+          type: "string",
+          description: "Optional extra sub-label for the record (e.g. 'www' gives www.myapp.makes.fyi).",
+        },
+      },
+      required: ["label"],
+    },
+    call: (cfg, a) => {
+      const body: Record<string, unknown> = { label: a.label };
+      if (a.domain) body.domain = a.domain;
+      if (a.email) body.email = a.email;
+      if (a.type) {
+        body.type = a.type;
+        body.content = a.content ?? "";
+        body.host = a.host ?? "";
+      }
+      return request(cfg, "POST", "/v1/subdomains", body);
+    },
+  },
+
+  {
+    name: "list_domains",
+    description:
+      "List every subdomain on this account, with each one's DNS records and whether it is forwarding, " +
+      "proxying, or delegated to external nameservers.",
+    inputSchema: { type: "object", properties: {} },
+    call: (cfg) => request(cfg, "GET", "/v1/subdomains"),
+  },
+
+  {
+    name: "get_domain",
+    description:
+      "Show one subdomain in full: its fqdn, DNS records, forward or proxy configuration, and delegation state.",
+    inputSchema: {
+      type: "object",
+      properties: { ...labelProp, ...domainProp },
+      required: ["label"],
+    },
+    call: (cfg, a) => request(cfg, "GET", resourcePath(a.label, "", a.domain)),
+  },
+
+  {
+    name: "delete_domain",
+    description:
+      "DESTRUCTIVE AND IRREVERSIBLE: permanently delete a subdomain and every DNS record, forward, and proxy " +
+      "attached to it. The hostname stops resolving immediately and the label is released for anyone else to " +
+      "claim. There is no undo and no recovery. Only call this when the user has explicitly asked for this " +
+      "specific name to be deleted.",
+    inputSchema: {
+      type: "object",
+      properties: { ...labelProp, ...domainProp },
+      required: ["label"],
+    },
+    call: (cfg, a) => request(cfg, "DELETE", resourcePath(a.label, "", a.domain)),
+  },
+
+  {
+    name: "add_dns_record",
+    description:
+      "Add a DNS record to a subdomain you already own. Use type A or AAAA to point at an IP address, CNAME to " +
+      "point at another hostname, or TXT for verification strings. Adding a record does not replace existing " +
+      "ones. Note: there is no API for deleting an individual record — delete_domain removes them all.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...labelProp,
+        type: { type: "string", description: "Record type: A, AAAA, CNAME, or TXT." },
+        content: {
+          type: "string",
+          description: "Record value: an IP for A/AAAA, a hostname for CNAME, the string for TXT.",
+        },
+        host: {
+          type: "string",
+          description:
+            "Optional extra sub-label under the name (e.g. 'www' creates www.myapp.makes.fyi). Omit for the name itself.",
+        },
+        ...domainProp,
+      },
+      required: ["label", "type", "content"],
+    },
+    call: (cfg, a) =>
+      request(cfg, "POST", resourcePath(a.label, "/records", a.domain), {
+        type: a.type,
+        content: a.content,
+        host: a.host ?? "",
+      }),
+  },
+
+  {
+    name: "add_acme_challenge",
+    description:
+      "Publish a Let's Encrypt DNS-01 challenge: creates a TXT record at _acme-challenge.<label>.<domain> with " +
+      "the token your ACME client printed. Use this to get a certificate without exposing port 80 (for example " +
+      "for a wildcard cert, or a host behind NAT). DNS propagates within seconds, then tell your ACME client to " +
+      "continue. For a normal public web server, HTTP-01 validation needs no DNS record at all.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...labelProp,
+        value: {
+          type: "string",
+          description: "The challenge token from your ACME client, published verbatim as the TXT value.",
+        },
+        ...domainProp,
+      },
+      required: ["label", "value"],
+    },
+    call: (cfg, a) =>
+      request(cfg, "POST", resourcePath(a.label, "/records", a.domain), {
+        type: "TXT",
+        content: a.value,
+        host: "_acme-challenge",
+      }),
+  },
+
+  {
+    name: "set_forward",
+    description:
+      "Forward (HTTP-redirect) a subdomain to another URL. Claims the label first if you do not own it yet, in " +
+      "which case an email may be required exactly as for claim_domain. Defaults to a 302 temporary redirect that " +
+      "preserves the request path and query. HTTPS at the edge is handled for you.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...labelProp,
+        target: { type: "string", description: "Destination URL, including scheme (e.g. https://example.com/docs)." },
+        permanent: {
+          type: "boolean",
+          description: "Use a 301 permanent redirect instead of the default 302 temporary one.",
+        },
+        preserve_path: {
+          type: "boolean",
+          description:
+            "Append the incoming path and query to the target. Defaults to true; set false to always land on the target root.",
+        },
+        cloak: {
+          type: "boolean",
+          description:
+            "Keep the AgentDomains hostname in the address bar and load the target inside a frame. Discouraged — breaks many sites.",
+        },
+        email: { type: "string", description: "Email, if this call also claims a new name on an account without one." },
+        ...domainProp,
+      },
+      required: ["label", "target"],
+    },
+    call: (cfg, a) => {
+      const body: Record<string, unknown> = {
+        target: a.target,
+        permanent: a.permanent ?? false,
+        preserve_path: a.preserve_path ?? true,
+        cloak: a.cloak ?? false,
+      };
+      if (a.domain) body.domain = a.domain;
+      if (a.email) body.email = a.email;
+      return request(cfg, "PUT", resourcePath(a.label, "/forward", a.domain), body);
+    },
+  },
+
+  {
+    name: "remove_forward",
+    description:
+      "Stop forwarding a subdomain. The name itself stays registered on the account; only the redirect is removed.",
+    inputSchema: {
+      type: "object",
+      properties: { ...labelProp, ...domainProp },
+      required: ["label"],
+    },
+    call: (cfg, a) => request(cfg, "DELETE", resourcePath(a.label, "/forward", a.domain)),
+  },
+
+  {
+    name: "set_proxy",
+    description:
+      "Serve a backend at this subdomain through the AgentDomains edge, which terminates TLS with its own " +
+      "certificate — this is how you get working HTTPS on an origin that has no certificate of its own (a bare " +
+      "IP-less PaaS host, a tunnel, an internal box). Unlike a forward, the URL stays on your domain and the " +
+      "response is proxied, not redirected. Claims the label first if needed. Caveat: apps that hardcode their " +
+      "own hostname (OAuth callbacks especially) may need your new hostname registered on their side.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...labelProp,
+        origin: {
+          type: "string",
+          description: "Backend hostname to proxy to, without a scheme (e.g. myapp.fly.dev). Must be a hostname, not an IP.",
+        },
+        email: { type: "string", description: "Email, if this call also claims a new name on an account without one." },
+        ...domainProp,
+      },
+      required: ["label", "origin"],
+    },
+    call: (cfg, a) => {
+      const body: Record<string, unknown> = { origin: a.origin };
+      if (a.domain) body.domain = a.domain;
+      if (a.email) body.email = a.email;
+      return request(cfg, "PUT", resourcePath(a.label, "/proxy", a.domain), body);
+    },
+  },
+
+  {
+    name: "remove_proxy",
+    description:
+      "Stop reverse-proxying a subdomain, so the edge no longer serves the backend or terminates TLS for it. " +
+      "The name stays registered on the account.",
+    inputSchema: {
+      type: "object",
+      properties: { ...labelProp, ...domainProp },
+      required: ["label"],
+    },
+    call: (cfg, a) => request(cfg, "DELETE", resourcePath(a.label, "/proxy", a.domain)),
+  },
+
+  {
+    name: "delegate_nameservers",
+    description:
+      "Delegate the subdomain to your own nameservers, handing you full control of it and everything beneath it " +
+      "(your own records, MX, deeper sub-domains). AgentDomains stops answering for the name, so its existing " +
+      "records, forwards, and proxies no longer apply. Supply at least two nameservers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...labelProp,
+        nameservers: {
+          type: "array",
+          items: { type: "string" },
+          description: "Your nameserver hostnames, e.g. ['ns1.yourdns.com', 'ns2.yourdns.com']. At least two.",
+        },
+        ...domainProp,
+      },
+      required: ["label", "nameservers"],
+    },
+    call: (cfg, a) =>
+      request(cfg, "PUT", resourcePath(a.label, "/ns", a.domain), { nameservers: a.nameservers }),
+  },
+];
+
+export const TOOL_BY_NAME: Map<string, ToolDef> = new Map(TOOLS.map((t) => [t.name, t]));

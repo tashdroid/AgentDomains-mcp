@@ -1,0 +1,53 @@
+{
+  "name": "@agentdomains/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for AgentDomains — free domains for the websites and APIs AI agents build.",
+  "license": "FSL-1.1-Apache-2.0",
+  "author": "Tashfeen Ahmed",
+  "homepage": "https://agentdomains.co",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tashfeenahmed/AgentDomains-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tashfeenahmed/AgentDomains-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "agentdomains",
+    "dns",
+    "domains",
+    "subdomain",
+    "ai-agents"
+  ],
+  "type": "module",
+  "bin": {
+    "agentdomains-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
