@@ -68,8 +68,9 @@ export const TOOLS: ToolDef[] = [
   {
     name: "whoami",
     description:
-      "Show the current account: id, state, attached email and whether it is verified, quota, domains used, " +
-      "and which domains are available to claim under.",
+      "Show the current account: id, state, attached email and whether it is verified, domains used, and which " +
+      "domains are available to claim under. When quotas are disabled the response omits 'quota' and says " +
+      "unlimited:true; 'max_subdomains' is the separate hard cap on how many names one account may hold at once.",
     inputSchema: { type: "object", properties: {} },
     call: (cfg) => request(cfg, "GET", "/v1/whoami"),
   },
@@ -95,7 +96,10 @@ export const TOOLS: ToolDef[] = [
       "Register a subdomain (label.makes.fyi or label.agentdomains.co) on this account, optionally creating its " +
       "first DNS record in the same call. An email is required the first time an account registers a name — pass " +
       "'email' here or call attach_email first; the name is reaped if that email is not confirmed within 30 days. " +
-      "Returns the fqdn and, when a record was requested, the created record.",
+      "Returns the fqdn and, when a record was requested, the created record. The claim and its first record " +
+      "succeed or fail together: if the record is malformed (400) or the provider refuses it (503) the label is " +
+      "NOT claimed, so fix the record and call again. Re-claiming a name this account already holds answers " +
+      "409 with owned:true — that means carry on using it, not pick another label.",
     inputSchema: {
       type: "object",
       properties: {
@@ -175,7 +179,9 @@ export const TOOLS: ToolDef[] = [
     description:
       "Add a DNS record to a subdomain you already own. Use type A or AAAA to point at an IP address, CNAME to " +
       "point at another hostname, or TXT for verification strings. Adding a record does not replace existing " +
-      "ones. Note: there is no API for deleting an individual record — delete_domain removes them all.",
+      "ones; use delete_record to remove a single one. Refused with a 409 while the label carries a forward or " +
+      "a proxy (they own the hostname) — call remove_forward or remove_proxy first, or add the record on a " +
+      "sub-label via 'host', which is a different hostname and unaffected.",
     inputSchema: {
       type: "object",
       properties: {
@@ -200,6 +206,30 @@ export const TOOLS: ToolDef[] = [
         content: a.content,
         host: a.host ?? "",
       }),
+  },
+
+  {
+    name: "delete_record",
+    description:
+      "DESTRUCTIVE: permanently remove ONE DNS record from a subdomain, keeping the name and every other record. " +
+      "Use this to undo a single record — a wrong IP, a spent ACME challenge — instead of delete_domain, which " +
+      "takes the whole name. The record_id is the 'id' field shown by get_domain (and returned by claim_domain " +
+      "and add_dns_record); it is not the record's name or content. The hostname stops resolving through that " +
+      "record immediately and there is no undo.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...labelProp,
+        record_id: {
+          type: "string",
+          description: "The record's 'id' as reported by get_domain — not its name, type, or content.",
+        },
+        ...domainProp,
+      },
+      required: ["label", "record_id"],
+    },
+    call: (cfg, a) =>
+      request(cfg, "DELETE", resourcePath(a.label, `/records/${encodeURIComponent(String(a.record_id))}`, a.domain)),
   },
 
   {
@@ -234,7 +264,11 @@ export const TOOLS: ToolDef[] = [
     description:
       "Forward (HTTP-redirect) a subdomain to another URL. Claims the label first if you do not own it yet, in " +
       "which case an email may be required exactly as for claim_domain. Defaults to a 302 temporary redirect that " +
-      "preserves the request path and query. HTTPS at the edge is handled for you.",
+      "preserves the request path and query. HTTPS at the edge is handled for you. " +
+      "A forward TAKES OVER the hostname: any A/AAAA/CNAME record on the label itself is deleted as part of this " +
+      "call and returned in 'replaced_records' — report those to the user, since the name no longer points where " +
+      "it did. Records on a sub-label (www.myapp.makes.fyi) and TXT records are untouched. If the forward fails " +
+      "to come up the replaced records are restored, with new ids.",
     inputSchema: {
       type: "object",
       properties: {
@@ -290,8 +324,11 @@ export const TOOLS: ToolDef[] = [
       "Serve a backend at this subdomain through the AgentDomains edge, which terminates TLS with its own " +
       "certificate — this is how you get working HTTPS on an origin that has no certificate of its own (a bare " +
       "IP-less PaaS host, a tunnel, an internal box). Unlike a forward, the URL stays on your domain and the " +
-      "response is proxied, not redirected. Claims the label first if needed. Caveat: apps that hardcode their " +
-      "own hostname (OAuth callbacks especially) may need your new hostname registered on their side.",
+      "response is proxied, not redirected. Claims the label first if needed. Like a forward, a proxy TAKES OVER " +
+      "the hostname: A/AAAA/CNAME records on the label itself are deleted and returned in 'replaced_records', " +
+      "while sub-label and TXT records are untouched. A proxy and a forward are mutually exclusive on one label. " +
+      "Caveat: apps that hardcode their own hostname (OAuth callbacks especially) may need your new hostname " +
+      "registered on their side.",
     inputSchema: {
       type: "object",
       properties: {
@@ -347,6 +384,30 @@ export const TOOLS: ToolDef[] = [
     },
     call: (cfg, a) =>
       request(cfg, "PUT", resourcePath(a.label, "/ns", a.domain), { nameservers: a.nameservers }),
+  },
+
+  {
+    name: "delete_account",
+    description:
+      "DESTRUCTIVE AND IRREVERSIBLE, AND THE LARGEST ONE HERE: delete the whole AgentDomains account and " +
+      "invalidate its API key, which cannot be recovered or reissued — every later tool call fails with a 401 " +
+      "until a new signup. Without force it REFUSES while the account still holds names, answering 409 with the " +
+      "list of them; that refusal is a safety net, so show the list to the user and get an explicit yes before " +
+      "retrying. With force:true those names are deleted too: they stop resolving at once and are released for " +
+      "anyone else to claim. Only ever call this when the user has asked to close the account itself — never as " +
+      "cleanup after a task, and never to 'start fresh' on your own initiative.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        force: {
+          type: "boolean",
+          description:
+            "Delete the names the account still holds along with it. Without this the call is refused while any " +
+            "name remains, which is the intended default.",
+        },
+      },
+    },
+    call: (cfg, a) => request(cfg, "DELETE", a.force ? "/v1/account?force=true" : "/v1/account"),
   },
 ];
 

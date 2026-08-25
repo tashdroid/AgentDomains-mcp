@@ -18,7 +18,7 @@ import { loadConfig } from "./api.js";
 import { TOOLS, TOOL_BY_NAME } from "./tools.js";
 
 const server = new Server(
-  { name: "agentdomains", version: "0.1.0" },
+  { name: "agentdomains", version: "0.1.1" },
   { capabilities: { tools: {} } },
 );
 

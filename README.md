@@ -84,15 +84,27 @@ The API key is never logged, printed, or included in any tool output.
 | `get_domain` | `GET /v1/subdomains/{label}` | One name, its records, forward/proxy state. |
 | `delete_domain` | `DELETE /v1/subdomains/{label}` | **Destructive** — permanently delete a name and its records. |
 | `add_dns_record` | `POST /v1/subdomains/{label}/records` | Add an A, AAAA, CNAME, or TXT record. |
+| `delete_record` | `DELETE /v1/subdomains/{label}/records/{id}` | **Destructive** — remove one record, keeping the name. Ids come from `get_domain`. |
 | `add_acme_challenge` | `POST /v1/subdomains/{label}/records` | TXT at `_acme-challenge` for Let's Encrypt DNS-01. |
-| `set_forward` | `PUT /v1/subdomains/{label}/forward` | Redirect the name to a URL. |
+| `set_forward` | `PUT /v1/subdomains/{label}/forward` | Redirect the name to a URL; replaces the address records on it. |
 | `remove_forward` | `DELETE /v1/subdomains/{label}/forward` | Stop forwarding. |
-| `set_proxy` | `PUT /v1/subdomains/{label}/proxy` | Serve a backend through the edge, with TLS terminated for you. |
+| `set_proxy` | `PUT /v1/subdomains/{label}/proxy` | Serve a backend through the edge, with TLS terminated for you; replaces the address records on it. |
 | `remove_proxy` | `DELETE /v1/subdomains/{label}/proxy` | Stop proxying. |
 | `delegate_nameservers` | `PUT /v1/subdomains/{label}/ns` | Delegate the name to your own nameservers. |
+| `delete_account` | `DELETE /v1/account[?force=true]` | **Destructive** — close the account and kill its key; refuses while names are held unless `force`. |
 
 Every label-scoped tool takes an optional `domain` (`makes.fyi`, the default, or
-`agentdomains.co`). There is no endpoint for deleting an individual DNS record.
+`agentdomains.co`).
+
+**Setting a forward or a proxy takes the hostname over.** The `A`/`AAAA`/`CNAME` records
+on the label itself are deleted in the same call and handed back as `replaced_records`,
+so tell the user what moved. Sub-label records (`www.myapp.makes.fyi`) and TXT records
+are left alone, and if the forward fails to come up the replaced records are restored
+with new ids.
+
+**A claim and its first record stand or fall together.** If `claim_domain` is given a
+record it cannot create, nothing is claimed — fix the record and call again. Re-claiming
+a name the account already holds answers `409` with `owned:true`, which means carry on.
 
 ### On HTTPS
 

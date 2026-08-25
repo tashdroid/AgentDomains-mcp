@@ -10,9 +10,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const EXPECTED = [
   "check_availability", "signup", "whoami", "attach_email", "claim_domain",
-  "list_domains", "get_domain", "delete_domain", "add_dns_record",
+  "list_domains", "get_domain", "delete_domain", "add_dns_record", "delete_record",
   "add_acme_challenge", "set_forward", "remove_forward", "set_proxy",
-  "remove_proxy", "delegate_nameservers",
+  "remove_proxy", "delegate_nameservers", "delete_account",
 ];
 
 const child = spawn(process.execPath, [join(root, "dist", "index.js")], {
