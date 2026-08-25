@@ -12,13 +12,13 @@ Two ways to run it: locally over stdio via `npx`, or against the hosted remote e
 No install step — `npx` fetches it on demand:
 
 ```bash
-AGENTDOMAINS_API_KEY=adom_… npx -y @agentdomains/mcp
+AGENTDOMAINS_API_KEY=adom_… npx -y agentdomains-mcp
 ```
 
 ### Claude Code
 
 ```bash
-claude mcp add agentdomains --env AGENTDOMAINS_API_KEY=adom_… -- npx -y @agentdomains/mcp
+claude mcp add agentdomains --env AGENTDOMAINS_API_KEY=adom_… -- npx -y agentdomains-mcp
 ```
 
 ### Claude Desktop and other config-file clients
@@ -30,7 +30,7 @@ Add to `claude_desktop_config.json` (or your client's equivalent):
   "mcpServers": {
     "agentdomains": {
       "command": "npx",
-      "args": ["-y", "@agentdomains/mcp"],
+      "args": ["-y", "agentdomains-mcp"],
       "env": { "AGENTDOMAINS_API_KEY": "adom_…" }
     }
   }
@@ -110,10 +110,10 @@ Any MCP client works. Verified shapes for the common ones:
 
 - **Claude Code** — `claude mcp add` (stdio or `--transport http`), as above.
 - **Claude Desktop** — `mcpServers` block in `claude_desktop_config.json`.
-- **OpenAI Agents SDK** — `MCPServerStdio(params={"command": "npx", "args": ["-y", "@agentdomains/mcp"]})`, or `MCPServerStreamableHttp` against the remote URL.
-- **LangChain / LangGraph** — `langchain-mcp-adapters`: `MultiServerMCPClient({"agentdomains": {"command": "npx", "args": ["-y", "@agentdomains/mcp"], "transport": "stdio"}})`.
+- **OpenAI Agents SDK** — `MCPServerStdio(params={"command": "npx", "args": ["-y", "agentdomains-mcp"]})`, or `MCPServerStreamableHttp` against the remote URL.
+- **LangChain / LangGraph** — `langchain-mcp-adapters`: `MultiServerMCPClient({"agentdomains": {"command": "npx", "args": ["-y", "agentdomains-mcp"], "transport": "stdio"}})`.
 - **CrewAI** — `MCPServerAdapter` with the same stdio parameters.
-- **Anything else** — point your client at `npx -y @agentdomains/mcp` over stdio, or at
+- **Anything else** — point your client at `npx -y agentdomains-mcp` over stdio, or at
   `https://mcp.agentdomains.co` over Streamable HTTP.
 
 ## Development

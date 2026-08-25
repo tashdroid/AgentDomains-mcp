@@ -2,7 +2,7 @@
 // AgentDomains MCP server (stdio transport).
 //
 // Exposes the AgentDomains API — free domains for the sites and APIs AI agents
-// build — as MCP tools. Run it with `npx -y @agentdomains/mcp`.
+// build — as MCP tools. Run it with `npx -y agentdomains-mcp`.
 //
 // Credentials come from AGENTDOMAINS_API_KEY, falling back to the CLI's
 // ~/.agentdomains/config.json. Nothing in this process ever logs the key.

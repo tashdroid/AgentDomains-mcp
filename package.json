@@ -1,5 +1,5 @@
 {
-  "name": "@agentdomains/mcp",
+  "name": "agentdomains-mcp",
   "version": "0.1.0",
   "description": "MCP server for AgentDomains — free domains for the websites and APIs AI agents build.",
   "license": "FSL-1.1-Apache-2.0",
