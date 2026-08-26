@@ -3,10 +3,12 @@
 // no API key needed. Exits non-zero on any failure.
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const PKG_VERSION = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 
 const EXPECTED = [
   "check_availability", "signup", "whoami", "attach_email", "claim_domain",
@@ -66,7 +68,12 @@ try {
   const init = await waitFor(1);
   if (init.error) fail(`initialize returned an error: ${JSON.stringify(init.error)}`);
   if (!init.result?.serverInfo?.name) fail("initialize returned no serverInfo.name");
-  console.log(`ok  initialize -> ${init.result.serverInfo.name} v${init.result.serverInfo.version}`);
+  // serverInfo.version and the User-Agent both come from package.json; if this
+  // ever disagrees, one of them has grown its own literal again.
+  if (init.result.serverInfo.version !== PKG_VERSION) {
+    fail(`serverInfo.version is ${init.result.serverInfo.version}, package.json says ${PKG_VERSION}`);
+  }
+  console.log(`ok  initialize -> ${init.result.serverInfo.name} v${init.result.serverInfo.version} (matches package.json)`);
 
   send({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });
 

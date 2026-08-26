@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { USER_AGENT } from "./version.js";
+
 export const DEFAULT_API_URL = "https://api.agentdomains.co";
 
 export interface ApiConfig {
@@ -64,7 +66,12 @@ export async function request(
     );
   }
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    // Without this, undici sends its own default and the API cannot tell an
+    // MCP tool call apart from a curl or from the Go CLI.
+    "User-Agent": USER_AGENT,
+  };
   if (cfg.apiKey) headers["Authorization"] = `Bearer ${cfg.apiKey}`;
 
   let res: Response;
