@@ -149,3 +149,14 @@ Requires Node 18+. The only runtime dependency is `@modelcontextprotocol/sdk`.
 ## License
 
 FSL-1.1-Apache-2.0 — see [LICENSE](LICENSE). Same terms as the CLI.
+
+## MCP Registry listing
+
+This server is published to the official [MCP Registry](https://registry.modelcontextprotocol.io)
+as `io.github.tashfeenahmed/agentdomains-mcp` — the canonical index that PulseMCP,
+Smithery, Glama and other agent-tool directories ingest. Publishing is automatic:
+moving `docs/publish-mcp-registry.yml` into `.github/workflows/` wires up
+automatic publishing: on a release tag the workflow validates `server.json`
+against the tag and uploads it via GitHub OIDC. (The file lives under `docs/`
+because the PR author token lacks the `workflow` scope needed to add workflow
+files.)
