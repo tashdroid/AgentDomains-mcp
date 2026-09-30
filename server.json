@@ -12,7 +12,15 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://mcp.agentdomains.co"
+      "url": "https://mcp.agentdomains.co",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer <your AgentDomains API key (adom_…)>. Only needed for tools that manage an account; check_availability works without it.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
     }
   ],
   "packages": [

@@ -152,11 +152,26 @@ FSL-1.1-Apache-2.0 — see [LICENSE](LICENSE). Same terms as the CLI.
 
 ## MCP Registry listing
 
-This server is published to the official [MCP Registry](https://registry.modelcontextprotocol.io)
-as `io.github.tashfeenahmed/agentdomains-mcp` — the canonical index that PulseMCP,
-Smithery, Glama and other agent-tool directories ingest. Publishing is automatic:
-moving `docs/publish-mcp-registry.yml` into `.github/workflows/` wires up
-automatic publishing: on a release tag the workflow validates `server.json`
-against the tag and uploads it via GitHub OIDC. (The file lives under `docs/`
-because the PR author token lacks the `workflow` scope needed to add workflow
-files.)
+This server is listed in the official [MCP Registry](https://registry.modelcontextprotocol.io)
+as `io.github.tashfeenahmed/agentdomains-mcp` — the index PulseMCP, Glama and other
+agent-tool directories read from. The metadata is `server.json` in this repo.
+
+Publishing is **manual** (GitHub Actions is not running on this account). On each npm
+release, bump `version` in `server.json` and its `packages[0].version` to match
+`package.json`, publish to npm first, then:
+
+```bash
+# once: install the publisher (macOS/Linux)
+curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+./mcp-publisher login github     # device-code flow as the tashfeenahmed GitHub account
+./mcp-publisher publish          # uploads server.json
+curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.tashfeenahmed/agentdomains-mcp"
+```
+
+The registry checks that the npm package's `mcpName` matches `name` in `server.json`,
+so the npm version named in `server.json` must already be published.
+
+`docs/publish-mcp-registry.yml` is an optional GitHub Actions workflow that does the same
+on a `v*` tag via GitHub OIDC. It only runs if moved to `.github/workflows/` and Actions
+is available on the account.
